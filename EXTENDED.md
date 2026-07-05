@@ -58,6 +58,11 @@ Three.js and OrbitControls load from a CDN (unpkg) at runtime — this
 is the one tool in the suite with an external dependency; everything
 else here is fully self-contained.
 
+Touch-friendly: one-finger orbit, two-finger pinch-zoom (OrbitControls'
+built-in touch handling), canvas sizes responsively instead of a fixed
+900x900, and the panel stacks below the canvas on narrow/tablet-width
+viewports.
+
 Deploys straight from this repo — no build command needed, publish
 directory is the repo root (`netlify.toml` included).
 

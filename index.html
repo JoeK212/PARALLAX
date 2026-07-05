@@ -12,6 +12,22 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.4.0 - 2026-07-05 - Tablet support, matching the pattern from
+           Sound/Relief's touch work: touch-action:none on the canvas so
+           the browser's native pinch-zoom/scroll gestures don't steal
+           touch events before OrbitControls' own touch handling sees
+           them (OrbitControls supports one-finger orbit / two-finger
+           pinch-zoom out of the box — the missing piece was always the
+           browser intercepting the gesture first, not missing touch
+           logic). Canvas is now responsive instead of a fixed 900x900:
+           it resizes to fit available space (capped at 900, floored at
+           280) on window resize/orientation change, staying square so
+           the orthographic frustum math needs no aspect-ratio handling.
+           Added a narrow-viewport media query (≤860px, matching
+           Sound/Relief's "narrow-panel" breakpoint convention): panel
+           stacks below the canvas instead of beside it, full width.
+           devicePixelRatio now applied (capped at 2) for sharper
+           rendering on high-DPI tablet and PC displays alike.
   v2.3.1 - 2026-07-05 - Fixed tooltips getting clipped on both edges.
            Root cause: #panel has overflow-y:auto (needed once the View
            grid made panel content taller than the viewport on shorter
@@ -122,7 +138,7 @@
   html,body{margin:0;height:100%;background:var(--bg);font-family:"Courier New",monospace;color:var(--ink);}
   #app{display:flex;height:100%;}
   #canvasWrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-  #canvasWrap canvas{display:block;cursor:grab;}
+  #canvasWrap canvas{display:block;cursor:grab;touch-action:none;}
   #canvasWrap canvas:active{cursor:grabbing;}
   #panel{width:270px;padding:20px 18px;border-left:2px solid var(--ink);box-sizing:border-box;overflow-y:auto;}
   h1{font-size:16px;letter-spacing:3px;margin:0 0 2px;}
@@ -194,6 +210,14 @@
   [data-tip]:hover::after{
     transform:translateX(-50%) translateY(0);
   }
+
+  /* tablet / narrow viewport — panel stacks below the canvas instead of
+     beside it, same breakpoint convention as Sound/Relief */
+  @media (max-width: 860px){
+    #app{flex-direction:column;}
+    #canvasWrap{flex:none;height:56vh;width:100%;}
+    #panel{width:100%;height:44vh;border-left:none;border-top:2px solid var(--ink);}
+  }
 </style>
 </head>
 <body>
@@ -246,7 +270,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.3.1';
+  const APP_VERSION = 'v2.4.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -344,8 +368,26 @@
   // ---------- three.js scene ----------
   const canvasWrap = document.getElementById('canvasWrap');
   const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
-  renderer.setSize(900,900);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   canvasWrap.appendChild(renderer.domElement);
+
+  // canvas stays square (matches the square orthographic frustum, so no
+  // aspect-ratio correction is needed) but its pixel size adapts to
+  // whatever space is actually available — fixed 900x900 overflowed on
+  // tablet-width viewports
+  function computeCanvasSize(){
+    const margin = 24;
+    const availW = canvasWrap.clientWidth - margin;
+    const availH = canvasWrap.clientHeight - margin;
+    return Math.max(280, Math.min(availW, availH, 900));
+  }
+  function resizeRenderer(){
+    const size = computeCanvasSize();
+    renderer.setSize(size, size);
+  }
+  resizeRenderer();
+  window.addEventListener('resize', resizeRenderer);
+  window.addEventListener('orientationchange', ()=> setTimeout(resizeRenderer, 200));
 
   const scene = new THREE.Scene();
   let frustum = 4.2; // initial guess; refit to actual content after every generate
