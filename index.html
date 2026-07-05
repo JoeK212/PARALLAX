@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PARALLAX</title>
+<!--
+  PARALLAX
+  Seeded generator of axonometric compositions — extruded volumes floating
+  in ambiguous space, no single fixed vanishing point, in the spirit of
+  Lissitzky's Proun plates. Sibling tool to KONSTRUKTOR (which stays flat);
+  PARALLAX is the 3D extension.
+  Joe.K · axisbim.io
+
+  CHANGELOG
+  v2.2.0 - 2026-07-05 - Canvas render size increased 720→900. Camera
+           framing is now auto-fit: after each Generate, a bounding sphere
+           is computed over the actual volume group and the Orthographic
+           frustum is sized to it (with margin), so long beams, wide
+           compositions, or high density no longer clip past the frustum
+           edges — previously the frustum was a fixed ±4.2 regardless of
+           what the composition actually contained.
+  v2.1.0 - 2026-07-05 - Added view presets: Iso (the default free-orbit
+           axonometric view), Front, Back, Left, Right, Top. Each snaps
+           the OrthographicCamera to a true orthogonal elevation/plan
+           view — genuinely useful on an architectural composition, not
+           just a camera gimmick. Top view uses a tiny x/z epsilon rather
+           than a true (0,D,0) pole position, since OrbitControls' internal
+           spherical math (azimuth = atan2(z,x)) is undefined exactly at
+           the pole; camera.up can't be swapped to dodge this either, since
+           r128's OrbitControls caches the up-axis quaternion once at
+           construction and never re-reads it. Clicking a preset freezes
+           auto-orbit (same freeze behavior as manual drag); the user can
+           still free-orbit away from a preset afterward, same as any CAD
+           view-cube interaction.
+  v2.0.0 - 2026-07-05 - Major architecture change: replaced the hand-rolled
+           SVG oblique-projection math with a real Three.js scene
+           (OrthographicCamera — no perspective distortion, so the flat,
+           no-vanishing-point read is preserved under free orbit, which a
+           perspective camera would break). Volumes are now real extruded
+           3D meshes (THREE.ExtrudeGeometry from the same rect/beam/wedge/
+           disk footprint generators), not projected 2D polygons. Flat
+           per-face shading now comes from an actual DirectionalLight +
+           AmbientLight with flatShading on MeshLambertMaterial, which is
+           the correct way to get light/dark face variation once the
+           camera can move freely (the old hardcoded "top lighter, side
+           darker" only worked from one fixed viewing angle). Chaos is
+           reimplemented as genuine 3D ambiguity: divergent volumes get an
+           extra 90° rotation around a random world axis, so their
+           extrusion direction actually differs from the rest of the
+           composition in real space, rather than a 2D projection-flip
+           trick. Removed Depth Angle / Depth Scale sliders (meaningless
+           once the camera orbits freely) — replaced with a Reset View
+           button. Added Auto-Orbit (turntable rotation) with the
+           freeze-on-manual-drag pattern from Tensegrity Explorer: any
+           user drag immediately disables autoRotate rather than fighting
+           it frame-by-frame. Save SVG removed — a WebGL canvas has no
+           vector representation to export; Save PNG remains
+           (preserveDrawingBuffer enabled so canvas snapshot works).
+  v1.1.0 - 2026-07-05 - Replaced the single axis-aligned-box primitive with
+           a generic rotated-footprint extrusion system: rect, beam (long
+           thin rod, free rotation), wedge (irregular triangle, free
+           rotation), and disk (flat n-gon, no extrusion). Footprints
+           rotate freely in-plane before extrusion — front faces stay true
+           shapes under cavalier projection regardless of rotation, so
+           tilted panels read correctly. This is what actually broke the
+           "same box, different size" look; shape-family + rotation vary
+           now, not just scale. Side faces generalized to one per
+           footprint edge (was hardcoded to 4 for boxes). Removed the flat
+           circle accent type (disks now serve that role as real,
+           depth-sorted volumes instead of an unprojected overlay).
+  v1.0.1 - 2026-07-05 - Moved version/credit line into the header block
+           (PARALLAX / axonometric composition generator / Joe.K ·
+           axisbim.io vX.X.X) and removed the duplicate footer block that
+           repeated the same info at the bottom of the panel.
+  v1.0.0 - 2026-07-05 - Initial build. Native 3D volume placement (not
+           extruded from a 2D layout — positions, footprints, and depths
+           are generated directly in xyz). Hand-rolled oblique/cavalier
+           projection (front faces stay true rectangles; NOT a Three.js
+           camera). Chaos control: per-volume probability that a volume's
+           depth direction diverges from the composition's global
+           direction, producing the ambiguous multi-viewpoint reading
+           real Proun plates have — this is the tool's signature
+           parameter. Flat (unprojected) construction lines/circles layer
+           at z=0, matching KONSTRUKTOR's Proun-mode accents. Palette
+           system reused verbatim from KONSTRUKTOR (classic/steel/olive/
+           mono, a/b/c/d/bg/line), with the same rule KONSTRUKTOR learned
+           the hard way: never fill a volume face with solid black —
+           color b is reserved for outlines/construction lines only.
+           Recolor button: decoupled RNG stream, reassigns face colors
+           and cycles palette without touching geometry (same convention
+           as KONSTRUKTOR). Auto-generate cycling. Save SVG / Save PNG.
+-->
+<style>
+  :root{ --bg:#EBE6D9; --ink:#14110F; --line:#B8AF9C; }
+  html,body{margin:0;height:100%;background:var(--bg);font-family:"Courier New",monospace;color:var(--ink);}
+  #app{display:flex;height:100%;}
+  #canvasWrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  #canvasWrap canvas{display:block;cursor:grab;}
+  #canvasWrap canvas:active{cursor:grabbing;}
+  #panel{width:270px;padding:20px 18px;border-left:2px solid var(--ink);box-sizing:border-box;overflow-y:auto;}
+  h1{font-size:16px;letter-spacing:3px;margin:0 0 2px;}
+  .sub{font-size:10px;opacity:.6;margin-bottom:2px;}
+  .credit{font-size:9px;opacity:.5;margin-bottom:16px;}
+  label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:13px 0 4px;}
+  input[type=range]{width:100%;accent-color:var(--ink);}
+  input[type=number]{width:100%;box-sizing:border-box;font-family:inherit;padding:4px;border:1px solid var(--ink);background:transparent;color:var(--ink);}
+  .val{float:right;opacity:.6;}
+  .swrow{display:flex;gap:6px;margin-top:4px;}
+  .swatch{width:28px;height:28px;border:1px solid var(--ink);cursor:pointer;box-sizing:border-box;}
+  .swatch.active{outline:2px solid var(--ink);outline-offset:2px;}
+  .swatch-classic{background:linear-gradient(135deg,#C1272D 50%,#14110F 50%);}
+  .swatch-steel{background:linear-gradient(135deg,#7C8A93 50%,#14110F 50%);}
+  .swatch-olive{background:linear-gradient(135deg,#A79A6D 50%,#C1272D 50%);}
+  .swatch-mono{background:linear-gradient(135deg,#EBE6D9 50%,#14110F 50%);}
+  button{width:100%;margin-top:14px;padding:8px;background:var(--ink);color:var(--bg);border:none;font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:inherit;}
+  button:hover{opacity:.85;}
+  button.secondary{background:transparent;color:var(--ink);border:1px solid var(--ink);}
+  .exportRow{display:flex;gap:8px;}
+  .exportRow button{margin-top:8px;}
+  .viewGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;}
+  .viewBtn{margin-top:0;padding:7px 4px;background:transparent;color:var(--ink);border:1px solid var(--ink);font-size:10px;}
+  .viewBtn.active{background:var(--ink);color:var(--bg);}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvasWrap"></div>
+  <div id="panel">
+    <h1>PARALLAX</h1>
+    <div class="sub">axonometric composition generator</div>
+    <div class="credit">Joe.K · axisbim.io <span id="appVersion"></span></div>
+
+    <label>Seed <span class="val" id="seedVal"></span></label>
+    <input type="number" id="seed" value="1">
+
+    <label>Density <span class="val" id="densityVal"></span></label>
+    <input type="range" id="density" min="4" max="26" value="11">
+
+    <label>Chaos <span class="val" id="chaosVal"></span></label>
+    <input type="range" id="chaos" min="0" max="100" value="30">
+
+    <label>Palette</label>
+    <div class="swrow">
+      <div class="swatch swatch-classic active" data-palette="classic" title="Classic"></div>
+      <div class="swatch swatch-steel" data-palette="steel" title="Steel"></div>
+      <div class="swatch swatch-olive" data-palette="olive" title="Olive"></div>
+      <div class="swatch swatch-mono" data-palette="mono" title="Mono"></div>
+    </div>
+
+    <label>View</label>
+    <div class="viewGrid">
+      <button class="viewBtn active" data-view="iso">Iso</button>
+      <button class="viewBtn" data-view="front">Front</button>
+      <button class="viewBtn" data-view="back">Back</button>
+      <button class="viewBtn" data-view="left">Left</button>
+      <button class="viewBtn" data-view="right">Right</button>
+      <button class="viewBtn" data-view="top">Top</button>
+    </div>
+
+    <button id="regen">Generate</button>
+    <button class="secondary" id="recolorBtn">Recolor (same volumes)</button>
+    <button class="secondary" id="autoGenBtn">Auto-generate: Off</button>
+    <button class="secondary" id="autoOrbitBtn">Auto-Orbit: On</button>
+    <button class="secondary" id="resetViewBtn">Reset View</button>
+
+    <div class="exportRow">
+      <button class="secondary" id="savePng" style="width:100%;">Save PNG</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+  const APP_VERSION = 'v2.2.0';
+  const SCALE = 0.01; // world units per footprint/canvas pixel unit
+
+  // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const W = 720, H = 720;
+
+  // palette set reused verbatim from KONSTRUKTOR's Proun-mode palette
+  const PALETTES = {
+    classic: { a:'#C1272D', b:'#14110F', c:'#A79A6D', d:'#7C8A93', bg:'#EBE6D9', line:'#B8AF9C' },
+    steel:   { a:'#7C8A93', b:'#14110F', c:'#C1272D', d:'#A79A6D', bg:'#EBE6D9', line:'#B8AF9C' },
+    olive:   { a:'#A79A6D', b:'#14110F', c:'#C1272D', d:'#7C8A93', bg:'#EBE6D9', line:'#B8AF9C' },
+    mono:    { a:'#14110F', b:'#5b564c', c:'#C1272D', d:'#B8AF9C', bg:'#EBE6D9', line:'#c9c1ae' }
+  };
+
+  let currentPalette = 'classic';
+  let colorSeed = 1; // decoupled from geometry seed; only Recolor advances this
+  let lastGeometry = null;
+
+  // ---------- footprint generators (local space, centered at origin) ----------
+  function footprintRect(rand){
+    const w = 30 + rand()*140, h = 30 + rand()*140;
+    return [{x:-w/2,y:-h/2},{x:w/2,y:-h/2},{x:w/2,y:h/2},{x:-w/2,y:h/2}];
+  }
+  function footprintBeam(rand){
+    const len = 140 + rand()*260, th = 4 + rand()*10;
+    return [{x:-len/2,y:-th/2},{x:len/2,y:-th/2},{x:len/2,y:th/2},{x:-len/2,y:th/2}];
+  }
+  function footprintWedge(rand){
+    const r1 = 40+rand()*90, r2 = 40+rand()*90, r3 = 40+rand()*90;
+    const a1 = rand()*Math.PI*0.6, a2 = a1 + Math.PI*0.5 + rand()*Math.PI*0.5, a3 = a2 + Math.PI*0.5 + rand()*Math.PI*0.5;
+    return [
+      {x:Math.cos(a1)*r1, y:Math.sin(a1)*r1},
+      {x:Math.cos(a2)*r2, y:Math.sin(a2)*r2},
+      {x:Math.cos(a3)*r3, y:Math.sin(a3)*r3}
+    ];
+  }
+  function footprintDisk(rand){
+    const r = 12 + rand()*38, n = 20;
+    const pts = [];
+    for(let i=0;i<n;i++){ const a = (i/n)*Math.PI*2; pts.push({x:Math.cos(a)*r, y:Math.sin(a)*r}); }
+    return pts;
+  }
+
+  const SHAPE_TYPES = [
+    {type:'rect',  weight:0.42, make:footprintRect,  depthMin:0.4,  depthMax:2.2, freeRotate:0.35},
+    {type:'beam',  weight:0.26, make:footprintBeam,  depthMin:0.15, depthMax:0.5, freeRotate:1.0},
+    {type:'wedge', weight:0.20, make:footprintWedge, depthMin:0.3,  depthMax:1.6, freeRotate:1.0},
+    {type:'disk',  weight:0.12, make:footprintDisk,  depthMin:0.0,  depthMax:0.15, freeRotate:0}
+  ];
+  function pickShape(rand){
+    let r = rand(), acc = 0;
+    for(const s of SHAPE_TYPES){ acc += s.weight; if(r <= acc) return s; }
+    return SHAPE_TYPES[0];
+  }
+
+  function generateGeometry(){
+    const seed = parseInt(document.getElementById('seed').value)||1;
+    const density = parseInt(document.getElementById('density').value);
+    const chaos = parseInt(document.getElementById('chaos').value)/100;
+
+    const rand = mulberry32(seed);
+    const volumes = [];
+    for(let i=0;i<density;i++){
+      const shape = pickShape(rand);
+      const footprint = shape.make(rand);
+      const rotRange = shape.freeRotate * Math.PI * 2;
+      const rot = (rand()-0.5) * rotRange;
+      const cx = rand()*W*0.7 + W*0.15;
+      const cy = rand()*H*0.6 + H*0.18;
+      const worldX = (cx - W/2) * SCALE;
+      const worldY = -(cy - H/2) * SCALE;
+      const worldZ = rand()*2.5 - 1.25;
+      const depth = shape.depthMin + rand()*(shape.depthMax-shape.depthMin);
+
+      // chaos: divergent volumes get rotated so their extrusion axis is a
+      // *different* world axis than the rest — genuine 3D ambiguity, not a
+      // 2D projection trick
+      const divergent = rand() < chaos;
+      const divAxis = rand()<0.5 ? 'x' : 'y';
+      const divSign = rand()<0.5 ? 1 : -1;
+
+      volumes.push({type:shape.type, footprint, rot, worldX, worldY, worldZ, depth, divergent, divAxis, divSign});
+    }
+    return {seed, density, chaos, volumes};
+  }
+
+  // ---------- three.js scene ----------
+  const canvasWrap = document.getElementById('canvasWrap');
+  const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+  renderer.setSize(900,900);
+  canvasWrap.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  let frustum = 4.2; // initial guess; refit to actual content after every generate
+  const camera = new THREE.OrthographicCamera(-frustum, frustum, frustum, -frustum, 0.1, 200);
+  const CAM_START = {x:6, y:4.5, z:7};
+
+  function fitCameraToContent(){
+    const box = new THREE.Box3().setFromObject(volumeGroup);
+    if(box.isEmpty()) return;
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    frustum = Math.max(sphere.radius * 1.3, 1.5); // margin so nothing touches the edge; floor avoids a degenerate tiny frustum on sparse/small compositions
+    camera.left = -frustum; camera.right = frustum;
+    camera.top = frustum; camera.bottom = -frustum;
+    camera.updateProjectionMatrix();
+  }
+
+  const CAM_DIST = 9.5;
+  const VIEWS = {
+    iso:   [CAM_START.x, CAM_START.y, CAM_START.z],
+    front: [0, 0, CAM_DIST],
+    back:  [0, 0, -CAM_DIST],
+    left:  [-CAM_DIST, 0, 0],
+    right: [CAM_DIST, 0, 0],
+    // tiny epsilon on x/z, not a true (0, D, 0) pole — OrbitControls' internal
+    // spherical math (azimuth = atan2(z,x)) is undefined exactly at the pole,
+    // and camera.up can't be swapped post-construction to dodge it (r128
+    // caches the up-axis quaternion once, at construction, permanently)
+    top:   [0.0001, CAM_DIST, 0.0001]
+  };
+
+  function setView(name){
+    const p = VIEWS[name];
+    camera.position.set(p[0], p[1], p[2]);
+    camera.lookAt(0,0,0);
+    controls.target.set(0,0,0);
+    controls.autoRotate = false;
+    document.getElementById('autoOrbitBtn').textContent = 'Auto-Orbit: Off';
+    controls.update();
+    document.querySelectorAll('.viewBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  }
+
+  function resetView(){ setView('iso'); }
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.4;
+  controls.addEventListener('start', ()=>{
+    if(controls.autoRotate){
+      controls.autoRotate = false;
+      document.getElementById('autoOrbitBtn').textContent = 'Auto-Orbit: Off';
+    }
+    document.querySelectorAll('.viewBtn').forEach(b=>b.classList.remove('active'));
+  });
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+  dirLight.position.set(4,6,5);
+  scene.add(ambient, dirLight);
+
+  let volumeGroup = new THREE.Group();
+  scene.add(volumeGroup);
+
+  function buildMesh(volume, pal, color){
+    const shape = new THREE.Shape();
+    const pts = volume.footprint;
+    shape.moveTo(pts[0].x*SCALE, pts[0].y*SCALE);
+    for(let i=1;i<pts.length;i++) shape.lineTo(pts[i].x*SCALE, pts[i].y*SCALE);
+    shape.closePath();
+
+    const depth = Math.max(volume.depth, 0.05);
+    const geo = new THREE.ExtrudeGeometry(shape, {depth, bevelEnabled:false});
+    const mat = new THREE.MeshLambertMaterial({color, flatShading:true, side:THREE.DoubleSide});
+    const mesh = new THREE.Mesh(geo, mat);
+
+    const edgeGeo = new THREE.EdgesGeometry(geo, 15);
+    const edges = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({color: pal.b}));
+    mesh.add(edges);
+
+    mesh.position.set(volume.worldX, volume.worldY, volume.worldZ);
+    mesh.rotateZ(volume.rot);
+    if(volume.divergent){
+      if(volume.divAxis === 'x') mesh.rotateX(Math.PI/2 * volume.divSign);
+      else mesh.rotateY(Math.PI/2 * volume.divSign);
+    }
+    return mesh;
+  }
+
+  function render(){
+    const pal = PALETTES[currentPalette];
+    document.getElementById('seedVal').textContent = lastGeometry.seed;
+    document.getElementById('densityVal').textContent = lastGeometry.density;
+    document.getElementById('chaosVal').textContent = lastGeometry.chaos.toFixed(2);
+
+    scene.remove(volumeGroup);
+    volumeGroup = new THREE.Group();
+
+    const colorRand = mulberry32(lastGeometry.seed + colorSeed*97 + 1000);
+    const fillKeys = ['a','c','d']; // never 'b' — reserved for outlines
+
+    for(const v of lastGeometry.volumes){
+      const color = pal[fillKeys[(colorRand()*fillKeys.length)|0]];
+      volumeGroup.add(buildMesh(v, pal, color));
+    }
+    scene.add(volumeGroup);
+    scene.background = new THREE.Color(pal.bg);
+    fitCameraToContent();
+  }
+
+  function generate(){
+    lastGeometry = generateGeometry();
+    render();
+  }
+
+  function recolor(){
+    colorSeed++;
+    const keys = Object.keys(PALETTES);
+    const others = keys.filter(k=>k!==currentPalette);
+    currentPalette = others[Math.floor(Math.random()*others.length)];
+    document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active', s.dataset.palette===currentPalette));
+    render();
+  }
+
+  // ---- controls ----
+  ['seed','density','chaos'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', generate);
+  });
+  document.getElementById('regen').addEventListener('click', generate);
+  document.getElementById('recolorBtn').addEventListener('click', recolor);
+  document.getElementById('resetViewBtn').addEventListener('click', resetView);
+  document.querySelectorAll('.viewBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=> setView(btn.dataset.view));
+  });
+
+  document.querySelectorAll('.swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      currentPalette = sw.dataset.palette;
+      document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active', s===sw));
+      render();
+    });
+  });
+
+  // ---- auto-generate (cycles compositions) ----
+  let autoGenTimer = null;
+  document.getElementById('autoGenBtn').addEventListener('click', (e)=>{
+    if(autoGenTimer){
+      clearInterval(autoGenTimer);
+      autoGenTimer = null;
+      e.target.textContent = 'Auto-generate: Off';
+    } else {
+      autoGenTimer = setInterval(()=>{
+        document.getElementById('seed').value = Math.floor(Math.random()*100000);
+        generate();
+      }, 2600);
+      e.target.textContent = 'Auto-generate: On';
+    }
+  });
+  ['seed','density','chaos'].forEach(id=>{
+    document.getElementById(id).addEventListener('pointerdown', ()=>{
+      if(autoGenTimer){ clearInterval(autoGenTimer); autoGenTimer=null; document.getElementById('autoGenBtn').textContent='Auto-generate: Off'; }
+    });
+  });
+
+  // ---- auto-orbit (turntable rotation, freezes on manual drag) ----
+  document.getElementById('autoOrbitBtn').addEventListener('click', (e)=>{
+    controls.autoRotate = !controls.autoRotate;
+    e.target.textContent = 'Auto-Orbit: ' + (controls.autoRotate ? 'On' : 'Off');
+  });
+
+  // ---- export ----
+  document.getElementById('savePng').addEventListener('click', ()=>{
+    renderer.render(scene, camera);
+    const a = document.createElement('a');
+    a.href = renderer.domElement.toDataURL('image/png');
+    a.download = `parallax_${lastGeometry.seed}.png`;
+    a.click();
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  document.getElementById('appVersion').textContent = APP_VERSION;
+  resetView();
+  generate();
+  animate();
+</script>
+</body>
+</html>
