@@ -12,6 +12,48 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.5.2 - 2026-07-05 - The scrollbar from the last fix was actually
+           #panel's own internal one, not the page's — html,body's
+           overflow-x:hidden (v2.5.1) doesn't reach into a separate
+           nested scroll container. #panel has overflow-y:auto for its
+           vertical scroll, and per the same CSS quirk behind the
+           tooltip-clipping bug (v2.3.1), leaving overflow-x unset there
+           lets the browser compute it as auto too — so anything even a
+           pixel wider than the panel's content box (grid gaps, native
+           range-input rendering, etc.) surfaces as the panel's own
+           horizontal scrollbar. Set overflow-x:hidden on #panel
+           explicitly. Safe now specifically because tooltips no longer
+           rely on overflowing horizontally (they wrap within a fixed
+           190px, since v2.3.1) — there's nothing left in this panel that
+           legitimately needs to overflow sideways.
+  v2.5.1 - 2026-07-05 - Removed the browser's own horizontal scrollbar
+           at the bottom of the page. html/body had no overflow-x set,
+           so any sub-pixel rounding in the responsive canvas sizing (or
+           the 2px panel border, or similar) that pushed total page width
+           a hair past 100vw would surface as a real page-level scrollbar
+           — this is a fixed single-viewport tool, nothing is meant to
+           scroll sideways at the page level (the panel's own vertical
+           scroll is unaffected). Added overflow-x:hidden to html,body.
+  v2.5.0 - 2026-07-05 - "axisbim.io" in the header credit line is now a
+           real link (opens in a new tab), matching KONSTRUKTOR's own
+           footer-credit convention. Kept PARALLAX's more muted styling
+           rather than KONSTRUKTOR's bold red-accent link. Switched
+           .credit from `opacity:.5` to an equivalent rgba() text color —
+           opacity on the parent would have capped the link's hover state
+           to the same 50%, the same compositing trap the button tooltips
+           hit in v2.4.1 — so the link can go fully opaque on hover
+           independent of the muted surrounding text.
+  v2.4.1 - 2026-07-05 - Fixed tooltips looking faintly translucent (text
+           bleeding through) on every button. Root cause: `button:hover{
+           opacity:.85}` was meant as subtle hover feedback on the button
+           itself, but CSS opacity composites an element *and all its
+           generated content* — including its own [data-tip]::after
+           tooltip — as a single translucent group. So hovering any
+           button also dimmed its tooltip to 85% opacity, regardless of
+           the tooltip's own opacity:1 rule. Replaced opacity-based hover
+           feedback with explicit background-color changes instead
+           (doesn't affect pseudo-elements), for both solid buttons and
+           the transparent secondary/view-preset buttons.
   v2.4.0 - 2026-07-05 - Tablet support, matching the pattern from
            Sound/Relief's touch work: touch-action:none on the canvas so
            the browser's native pinch-zoom/scroll gestures don't steal
@@ -135,15 +177,17 @@
 -->
 <style>
   :root{ --bg:#EBE6D9; --ink:#14110F; --line:#B8AF9C; }
-  html,body{margin:0;height:100%;background:var(--bg);font-family:"Courier New",monospace;color:var(--ink);}
+  html,body{margin:0;height:100%;overflow-x:hidden;background:var(--bg);font-family:"Courier New",monospace;color:var(--ink);}
   #app{display:flex;height:100%;}
   #canvasWrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;}
   #canvasWrap canvas{display:block;cursor:grab;touch-action:none;}
   #canvasWrap canvas:active{cursor:grabbing;}
-  #panel{width:270px;padding:20px 18px;border-left:2px solid var(--ink);box-sizing:border-box;overflow-y:auto;}
+  #panel{width:270px;padding:20px 18px;border-left:2px solid var(--ink);box-sizing:border-box;overflow-y:auto;overflow-x:hidden;}
   h1{font-size:16px;letter-spacing:3px;margin:0 0 2px;}
   .sub{font-size:10px;opacity:.6;margin-bottom:2px;}
-  .credit{font-size:9px;opacity:.5;margin-bottom:16px;}
+  .credit{font-size:9px;color:rgba(20,17,15,0.55);margin-bottom:16px;}
+  .credit a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;}
+  .credit a:hover{color:rgba(20,17,15,1);border-bottom-color:rgba(20,17,15,1);}
   label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:13px 0 4px;}
   input[type=range]{width:100%;accent-color:var(--ink);}
   input[type=number]{width:100%;box-sizing:border-box;font-family:inherit;padding:4px;border:1px solid var(--ink);background:transparent;color:var(--ink);}
@@ -156,13 +200,16 @@
   .swatch-olive{background:linear-gradient(135deg,#A79A6D 50%,#C1272D 50%);}
   .swatch-mono{background:linear-gradient(135deg,#EBE6D9 50%,#14110F 50%);}
   button{width:100%;margin-top:14px;padding:8px;background:var(--ink);color:var(--bg);border:none;font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:inherit;}
-  button:hover{opacity:.85;}
+  button:hover{background:#2a2620;}
   button.secondary{background:transparent;color:var(--ink);border:1px solid var(--ink);}
+  button.secondary:hover{background:rgba(20,17,15,0.08);}
   .exportRow{display:flex;gap:8px;}
   .exportRow button{margin-top:8px;}
   .viewGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;}
   .viewBtn{margin-top:0;padding:7px 4px;background:transparent;color:var(--ink);border:1px solid var(--ink);font-size:10px;}
+  .viewBtn:hover{background:rgba(20,17,15,0.08);}
   .viewBtn.active{background:var(--ink);color:var(--bg);}
+  .viewBtn.active:hover{background:#2a2620;}
 
   /* hover tooltips — CSS-only via [data-tip], same convention as KONSTRUKTOR */
   [data-tip]{position:relative;}
@@ -226,7 +273,7 @@
   <div id="panel">
     <h1>PARALLAX</h1>
     <div class="sub">axonometric composition generator</div>
-    <div class="credit">Joe.K · axisbim.io <span id="appVersion"></span></div>
+    <div class="credit">Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a> <span id="appVersion"></span></div>
 
     <label>Seed <span class="val" id="seedVal"></span></label>
     <input type="number" id="seed" value="1" data-tip="Same seed + density + chaos = same plate, always">
@@ -270,7 +317,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.4.0';
+  const APP_VERSION = 'v2.5.2';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
