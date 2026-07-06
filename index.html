@@ -12,6 +12,12 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.6.0 - 2026-07-05 - Added a selectable Auto-generate interval (2s/5s/
+           10s/15s), replacing the hardcoded 2600ms cycle. Changing the
+           select while Auto-generate is already running restarts the
+           timer immediately at the new interval rather than waiting for
+           the next natural tick; changing it while off just updates the
+           stored preference for next time.
   v2.5.2 - 2026-07-05 - The scrollbar from the last fix was actually
            #panel's own internal one, not the page's — html,body's
            overflow-x:hidden (v2.5.1) doesn't reach into a separate
@@ -191,6 +197,7 @@
   label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:13px 0 4px;}
   input[type=range]{width:100%;accent-color:var(--ink);}
   input[type=number]{width:100%;box-sizing:border-box;font-family:inherit;padding:4px;border:1px solid var(--ink);background:transparent;color:var(--ink);}
+  select{width:100%;box-sizing:border-box;font-family:inherit;font-size:11px;padding:4px;border:1px solid var(--ink);background:var(--bg);color:var(--ink);}
   .val{float:right;opacity:.6;}
   .swrow{display:flex;gap:6px;margin-top:4px;}
   .swatch{width:28px;height:28px;border:1px solid var(--ink);cursor:pointer;box-sizing:border-box;}
@@ -304,6 +311,13 @@
 
     <button id="regen" data-tip="New random seed, new composition">Generate</button>
     <button class="secondary" id="recolorBtn" data-tip="Same volumes, new colors + palette">Recolor (same volumes)</button>
+    <label>Auto-generate interval</label>
+    <select id="autoGenInterval" data-tip="How often Auto-generate cycles to a new composition">
+      <option value="2000">2s</option>
+      <option value="5000" selected>5s</option>
+      <option value="10000">10s</option>
+      <option value="15000">15s</option>
+    </select>
     <button class="secondary" id="autoGenBtn" data-tip="Cycle through new compositions automatically">Auto-generate: Off</button>
     <button class="secondary" id="autoOrbitBtn" data-tip="Slow turntable rotation — freezes if you drag">Auto-Orbit: On</button>
     <button class="secondary" id="resetViewBtn" data-tip="Return to the default Iso framing">Reset View</button>
@@ -317,7 +331,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.5.2';
+  const APP_VERSION = 'v2.6.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -583,17 +597,30 @@
 
   // ---- auto-generate (cycles compositions) ----
   let autoGenTimer = null;
+  function autoGenTick(){
+    document.getElementById('seed').value = Math.floor(Math.random()*100000);
+    generate();
+  }
+  function startAutoGen(){
+    const interval = parseInt(document.getElementById('autoGenInterval').value) || 5000;
+    autoGenTimer = setInterval(autoGenTick, interval);
+  }
   document.getElementById('autoGenBtn').addEventListener('click', (e)=>{
     if(autoGenTimer){
       clearInterval(autoGenTimer);
       autoGenTimer = null;
       e.target.textContent = 'Auto-generate: Off';
     } else {
-      autoGenTimer = setInterval(()=>{
-        document.getElementById('seed').value = Math.floor(Math.random()*100000);
-        generate();
-      }, 2600);
+      startAutoGen();
       e.target.textContent = 'Auto-generate: On';
+    }
+  });
+  document.getElementById('autoGenInterval').addEventListener('change', ()=>{
+    // if already running, restart immediately at the new interval rather
+    // than waiting out whatever was left of the old one
+    if(autoGenTimer){
+      clearInterval(autoGenTimer);
+      startAutoGen();
     }
   });
   ['seed','density','chaos'].forEach(id=>{
