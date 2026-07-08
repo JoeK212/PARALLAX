@@ -29,6 +29,10 @@ Four shape families make up a composition:
   than the rest of the composition — genuine 3D ambiguity, not a
   projection trick — producing the multi-viewpoint read real Proun
   plates have.
+- **Lines** — thin construction lines, roughly half connecting two
+  real volumes' positions (a structural read) and half floating
+  independently (a looser, gestural read), with a chance of a small
+  marker dot at one endpoint
 - **Palette** — four variants (classic, steel, olive, mono), reused
   from KONSTRUKTOR's Proun-mode palette. Fill colors are only ever
   drawn from three of a palette's four colors — the fourth is reserved

@@ -12,6 +12,17 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.8.0 - 2026-07-05 - Added a Lines control: thin construction lines,
+           mixed roughly 50/50 between connective (linking two real
+           volumes' positions — a structural read) and floating
+           (independent points within the same distribution volumes use —
+           a looser, more gestural read), with a chance of a small marker
+           dot at one endpoint. Unlike the old flat line/circle accent
+           layer removed in v1.1.0 (unprojected 2D overlay), these are
+           real THREE.Line segments living in the same 3D space as the
+           volumes — they orbit correctly and are included in
+           fitCameraToContent's bounding box, so a floating line that
+           extends past the volume cluster doesn't get clipped.
   v2.7.0 - 2026-07-05 - Fixed a latent bug: Auto-Orbit's button has always
            read "On" by default, but init called resetView() to position
            the camera — which internally reuses setView(), the same
@@ -305,6 +316,9 @@
     <label>Chaos <span class="val" id="chaosVal"></span></label>
     <input type="range" id="chaos" min="0" max="100" value="30" data-tip="Higher = more volumes diverge onto a different depth axis">
 
+    <label>Lines <span class="val" id="linesVal"></span></label>
+    <input type="range" id="lines" min="0" max="16" value="6" data-tip="Thin construction lines — a mix of ones connecting volumes and ones floating independently">
+
     <label>Palette</label>
     <div class="swrow">
       <div class="swatch swatch-classic active" data-palette="classic" title="Classic" data-tip="True primaries — closest to the real thing"></div>
@@ -345,7 +359,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.7.0';
+  const APP_VERSION = 'v2.8.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -437,7 +451,37 @@
 
       volumes.push({type:shape.type, footprint, rot, worldX, worldY, worldZ, depth, divergent, divAxis, divSign});
     }
-    return {seed, density, chaos, volumes};
+
+    // lines: roughly half connect two real volumes' positions (structural
+    // read), half float independently within the same distribution volumes
+    // use (gestural read) — a genuine 3D signature, not the old flat
+    // unprojected accent overlay removed in v1.1.0
+    const nLines = parseInt(document.getElementById('lines').value);
+    const lines = [];
+    const randomPoint = ()=>({
+      x: (rand()*W*0.7 + W*0.15 - W/2) * SCALE,
+      y: -(rand()*H*0.6 + H*0.18 - H/2) * SCALE,
+      z: rand()*2.5 - 1.25
+    });
+    for(let i=0;i<nLines;i++){
+      const connective = rand() < 0.5 && volumes.length >= 2;
+      let a, b;
+      if(connective){
+        const i1 = Math.floor(rand()*volumes.length);
+        let i2 = Math.floor(rand()*volumes.length);
+        if(i2===i1) i2 = (i2+1) % volumes.length;
+        a = {x:volumes[i1].worldX, y:volumes[i1].worldY, z:volumes[i1].worldZ};
+        b = {x:volumes[i2].worldX, y:volumes[i2].worldY, z:volumes[i2].worldZ};
+      } else {
+        a = randomPoint();
+        b = randomPoint();
+      }
+      const hasDot = rand() < 0.4;
+      const dotEnd = rand() < 0.5 ? a : b;
+      lines.push({a, b, connective, hasDot, dotEnd});
+    }
+
+    return {seed, density, chaos, volumes, lines};
   }
 
   // ---------- three.js scene ----------
@@ -471,6 +515,8 @@
 
   function fitCameraToContent(){
     const box = new THREE.Box3().setFromObject(volumeGroup);
+    const lineBox = new THREE.Box3().setFromObject(lineGroup);
+    if(!lineBox.isEmpty()) box.union(lineBox);
     if(box.isEmpty()) return;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     frustum = Math.max(sphere.radius * 1.3, 1.5); // margin so nothing touches the edge; floor avoids a degenerate tiny frustum on sparse/small compositions
@@ -535,6 +581,8 @@
 
   let volumeGroup = new THREE.Group();
   scene.add(volumeGroup);
+  let lineGroup = new THREE.Group();
+  scene.add(lineGroup);
 
   function buildMesh(volume, pal, color){
     const shape = new THREE.Shape();
@@ -566,9 +614,12 @@
     document.getElementById('seedVal').textContent = lastGeometry.seed;
     document.getElementById('densityVal').textContent = lastGeometry.density;
     document.getElementById('chaosVal').textContent = lastGeometry.chaos.toFixed(2);
+    document.getElementById('linesVal').textContent = lastGeometry.lines.length;
 
     scene.remove(volumeGroup);
     volumeGroup = new THREE.Group();
+    scene.remove(lineGroup);
+    lineGroup = new THREE.Group();
 
     const colorRand = mulberry32(lastGeometry.seed + colorSeed*97 + 1000);
     const fillKeys = ['a','c','d']; // never 'b' — reserved for outlines
@@ -578,6 +629,24 @@
       volumeGroup.add(buildMesh(v, pal, color));
     }
     scene.add(volumeGroup);
+
+    for(const ln of lastGeometry.lines){
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(ln.a.x, ln.a.y, ln.a.z),
+        new THREE.Vector3(ln.b.x, ln.b.y, ln.b.z)
+      ]);
+      const mat = new THREE.LineBasicMaterial({color: pal.line, transparent:true, opacity:0.65});
+      lineGroup.add(new THREE.Line(geo, mat));
+      if(ln.hasDot){
+        const dotGeo = new THREE.SphereGeometry(0.035, 8, 8);
+        const dotMat = new THREE.MeshBasicMaterial({color: pal.b});
+        const dot = new THREE.Mesh(dotGeo, dotMat);
+        dot.position.set(ln.dotEnd.x, ln.dotEnd.y, ln.dotEnd.z);
+        lineGroup.add(dot);
+      }
+    }
+    scene.add(lineGroup);
+
     scene.background = new THREE.Color(pal.bg);
     fitCameraToContent();
   }
@@ -597,7 +666,7 @@
   }
 
   // ---- controls ----
-  ['seed','density','chaos'].forEach(id=>{
+  ['seed','density','chaos','lines'].forEach(id=>{
     document.getElementById(id).addEventListener('input', generate);
   });
   document.getElementById('regen').addEventListener('click', ()=>{
@@ -646,7 +715,7 @@
       startAutoGen();
     }
   });
-  ['seed','density','chaos'].forEach(id=>{
+  ['seed','density','chaos','lines'].forEach(id=>{
     document.getElementById(id).addEventListener('pointerdown', ()=>{
       if(autoGenTimer){ clearInterval(autoGenTimer); autoGenTimer=null; document.getElementById('autoGenBtn').textContent='Auto-generate: Off'; }
     });
