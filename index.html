@@ -12,6 +12,14 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.9.0 - 2026-07-05 - Marker-dot tuning on lines: overall chance of a
+           line getting a node raised (was 40% single-end only). Now a
+           line can get no node, a single node (at the current 0.035
+           radius), or — for a subset — nodes on both ends, which reads
+           as "measured" the way some of Lissitzky's construction lines
+           do. Both-end nodes are drawn slightly smaller (0.026 radius)
+           than a single node, so a doubled node doesn't read as visually
+           heavier than a single one.
   v2.8.0 - 2026-07-05 - Added a Lines control: thin construction lines,
            mixed roughly 50/50 between connective (linking two real
            volumes' positions — a structural read) and floating
@@ -359,7 +367,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.8.0';
+  const APP_VERSION = 'v2.9.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -476,9 +484,16 @@
         a = randomPoint();
         b = randomPoint();
       }
-      const hasDot = rand() < 0.4;
-      const dotEnd = rand() < 0.5 ? a : b;
-      lines.push({a, b, connective, hasDot, dotEnd});
+      // node chance raised, and a subset now get nodes on BOTH ends (reads
+      // as "measured", the way some of Lissitzky's construction lines are
+      // capped at both ends rather than one)
+      const nodeRoll = rand();
+      let nodeMode = 'none';
+      if(nodeRoll < 0.65){
+        nodeMode = rand() < 0.4 ? 'both' : 'single';
+      }
+      const dotEnd = nodeMode==='single' ? (rand() < 0.5 ? a : b) : null;
+      lines.push({a, b, connective, nodeMode, dotEnd});
     }
 
     return {seed, density, chaos, volumes, lines};
@@ -630,6 +645,13 @@
     }
     scene.add(volumeGroup);
 
+    function addNode(pt, r){
+      const dotGeo = new THREE.SphereGeometry(r, 8, 8);
+      const dotMat = new THREE.MeshBasicMaterial({color: pal.b});
+      const dot = new THREE.Mesh(dotGeo, dotMat);
+      dot.position.set(pt.x, pt.y, pt.z);
+      lineGroup.add(dot);
+    }
     for(const ln of lastGeometry.lines){
       const geo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(ln.a.x, ln.a.y, ln.a.z),
@@ -637,12 +659,11 @@
       ]);
       const mat = new THREE.LineBasicMaterial({color: pal.line, transparent:true, opacity:0.65});
       lineGroup.add(new THREE.Line(geo, mat));
-      if(ln.hasDot){
-        const dotGeo = new THREE.SphereGeometry(0.035, 8, 8);
-        const dotMat = new THREE.MeshBasicMaterial({color: pal.b});
-        const dot = new THREE.Mesh(dotGeo, dotMat);
-        dot.position.set(ln.dotEnd.x, ln.dotEnd.y, ln.dotEnd.z);
-        lineGroup.add(dot);
+      if(ln.nodeMode === 'single'){
+        addNode(ln.dotEnd, 0.035);
+      } else if(ln.nodeMode === 'both'){
+        addNode(ln.a, 0.026);
+        addNode(ln.b, 0.026);
       }
     }
     scene.add(lineGroup);
