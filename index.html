@@ -12,6 +12,20 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.7.0 - 2026-07-05 - Fixed a latent bug: Auto-Orbit's button has always
+           read "On" by default, but init called resetView() to position
+           the camera — which internally reuses setView(), the same
+           function the view-preset buttons use, and that function always
+           freezes auto-orbit as part of handling a click. So on every
+           page load, auto-orbit was silently turned back off a moment
+           before the first frame rendered, contradicting its own label.
+           Split camera positioning (positionCamera) from the
+           freeze-on-interaction behavior (setView, still used by the
+           preset buttons and the Reset View button) so init can position
+           the camera without touching autoRotate. Also: Auto-generate now
+           starts automatically at load too, at its default 5s interval —
+           the page now opens already orbiting and already cycling
+           compositions, rather than requiring two clicks first.
   v2.6.0 - 2026-07-05 - Added a selectable Auto-generate interval (2s/5s/
            10s/15s), replacing the hardcoded 2600ms cycle. Changing the
            select while Auto-generate is already running restarts the
@@ -331,7 +345,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.6.0';
+  const APP_VERSION = 'v2.7.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -479,15 +493,24 @@
     top:   [0.0001, CAM_DIST, 0.0001]
   };
 
-  function setView(name){
+  function positionCamera(name){
     const p = VIEWS[name];
     camera.position.set(p[0], p[1], p[2]);
     camera.lookAt(0,0,0);
     controls.target.set(0,0,0);
-    controls.autoRotate = false;
-    document.getElementById('autoOrbitBtn').textContent = 'Auto-Orbit: Off';
     controls.update();
     document.querySelectorAll('.viewBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  }
+
+  // setView is what the view-preset buttons and Reset View call — clicking
+  // any of them is a deliberate user interaction, so (like a manual drag)
+  // it freezes auto-orbit. Init uses positionCamera() directly instead,
+  // since positioning the camera on page load isn't a user interaction and
+  // shouldn't silently override the Auto-Orbit default.
+  function setView(name){
+    positionCamera(name);
+    controls.autoRotate = false;
+    document.getElementById('autoOrbitBtn').textContent = 'Auto-Orbit: Off';
   }
 
   function resetView(){ setView('iso'); }
@@ -651,9 +674,11 @@
   }
 
   document.getElementById('appVersion').textContent = APP_VERSION;
-  resetView();
+  positionCamera('iso'); // not resetView() — positioning at load isn't a user interaction and shouldn't freeze Auto-Orbit
   generate();
   animate();
+  startAutoGen();
+  document.getElementById('autoGenBtn').textContent = 'Auto-generate: On';
 </script>
 </body>
 </html>
