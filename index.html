@@ -12,6 +12,19 @@
   Joe.K · axisbim.io
 
   CHANGELOG
+  v2.10.0 - 2026-07-05 - Two additions to the Lines/node system: (1)
+           midpoint nodes — an independent ~30% chance per line, separate
+           from and stackable with the existing endpoint node roll, so a
+           line can have no nodes, an endpoint node, a midpoint node, or
+           both. Sized between the two endpoint tiers (0.03). (2) Floating
+           nodes — standalone markers with no connecting line at all,
+           count derived from the Lines slider (roughly half its value,
+           consistent with how the old flat accent-line count used to
+           derive from Density) rather than a dedicated slider, with
+           randomized size per node (0.02–0.045) for variety. Both live in
+           lineGroup, so they're already covered by fitCameraToContent's
+           existing bounding-box union — no new group or camera-fit logic
+           needed.
   v2.9.0 - 2026-07-05 - Marker-dot tuning on lines: overall chance of a
            line getting a node raised (was 40% single-end only). Now a
            line can get no node, a single node (at the current 0.035
@@ -367,7 +380,7 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.9.0';
+  const APP_VERSION = 'v2.10.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -493,10 +506,22 @@
         nodeMode = rand() < 0.4 ? 'both' : 'single';
       }
       const dotEnd = nodeMode==='single' ? (rand() < 0.5 ? a : b) : null;
-      lines.push({a, b, connective, nodeMode, dotEnd});
+      // midpoint node: independent roll, stackable with the endpoint node —
+      // a line can end up with none, an endpoint node, a midpoint node, or both
+      const hasMidpoint = rand() < 0.3;
+      lines.push({a, b, connective, nodeMode, dotEnd, hasMidpoint});
     }
 
-    return {seed, density, chaos, volumes, lines};
+    // floating nodes: standalone markers with no connecting line at all.
+    // Count derives from the Lines slider rather than a dedicated control,
+    // same convention the old flat accent-line count used with Density.
+    const nFloating = Math.round(nLines * 0.5);
+    const floatingNodes = [];
+    for(let i=0;i<nFloating;i++){
+      floatingNodes.push({pt: randomPoint(), r: 0.02 + rand()*0.025});
+    }
+
+    return {seed, density, chaos, volumes, lines, floatingNodes};
   }
 
   // ---------- three.js scene ----------
@@ -665,6 +690,12 @@
         addNode(ln.a, 0.026);
         addNode(ln.b, 0.026);
       }
+      if(ln.hasMidpoint){
+        addNode({x:(ln.a.x+ln.b.x)/2, y:(ln.a.y+ln.b.y)/2, z:(ln.a.z+ln.b.z)/2}, 0.03);
+      }
+    }
+    for(const fn of lastGeometry.floatingNodes){
+      addNode(fn.pt, fn.r);
     }
     scene.add(lineGroup);
 
