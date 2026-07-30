@@ -21,7 +21,7 @@ Four shape families make up a composition:
 
 ## Controls
 
-- **Seed** — set directly, or randomized via Auto-generate
+- **Seed** — set directly, or randomized via Generate/Auto-generate
 - **Density** — number of volumes
 - **Chaos** — the tool's signature parameter. At 0, every volume's
   extrusion direction agrees, reading as a coherent isometric scene.
@@ -31,17 +31,20 @@ Four shape families make up a composition:
   plates have.
 - **Lines** — thin construction lines, roughly half connecting two
   real volumes' positions (a structural read) and half floating
-  independently (a looser, gestural read), with a chance of a small
-  marker dot at one endpoint
+  independently (a looser, gestural read). Lines can carry a marker
+  node at one endpoint, both endpoints, and/or the midpoint — plus a
+  handful of fully independent floating nodes with no line at all.
 - **Palette** — four variants (classic, steel, olive, mono), reused
   from KONSTRUKTOR's Proun-mode palette. Fill colors are only ever
   drawn from three of a palette's four colors — the fourth is reserved
   for outlines.
 - **Recolor** — reassigns face colors and palette without touching the
   underlying geometry
-- **Auto-generate** — cycles through new compositions on a timer
-- **Auto-Orbit** — slow turntable rotation of the camera; freezes the
-  instant you manually drag, so it never fights your input
+- **Auto-generate** — cycles through new compositions automatically
+  (starts on by default); interval is selectable (2s/5s/10s/15s)
+- **Auto-Orbit** — slow turntable rotation of the camera, on by
+  default; freezes the instant you manually drag, so it never fights
+  your input
 - **View presets** — Iso, Front, Back, Left, Right, Top. The five
   orthogonal views are true elevations/plan, not just camera angles
 - **Reset View** — returns to the default Iso framing
@@ -55,8 +58,8 @@ seeded PRNG (mulberry32). Rendering is a real Three.js scene — an
 the axonometric read intact under free orbit) with `OrbitControls`,
 volumes built from `ExtrudeGeometry`, flat shading from a simple
 ambient + directional light setup. Camera framing auto-fits to
-whatever the composition actually contains, so nothing clips past the
-frustum edge regardless of density or how far a beam extends.
+whatever the composition actually contains (volumes and lines both),
+so nothing clips past the frustum edge.
 
 Three.js and OrbitControls load from a CDN (unpkg) at runtime — this
 is the one tool in the suite with an external dependency; everything

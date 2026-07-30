@@ -11,8 +11,7 @@ Sibling tool to [KONSTRUKTOR](https://randompatterngeneratorv1.netlify.app)
 (the flat 2D counterpart).
 
 See [EXTENDED.md](EXTENDED.md) for controls, shape families, and tech
-details. Full version history is in the changelog comment block at the
-top of `index.html`.
+details.
 
 ---
 Joe.K · [axisbim.io](https://axisbim.io)
