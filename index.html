@@ -102,6 +102,24 @@
     #canvasWrap{flex:none;height:56vh;width:100%;}
     #panel{width:100%;height:44vh;border-left:none;border-top:2px solid var(--ink);}
   }
+
+  /* phone-width gate — below this, the tool itself doesn't work well
+     regardless of touch support, so it's hidden entirely in favor of a
+     message, matching the Modulor Mondrian convention */
+  #phoneGate{display:none;}
+  @media (max-width: 600px){
+    #app{display:none;}
+    #phoneGate{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      height:100%;width:100%;box-sizing:border-box;padding:40px 30px;text-align:center;
+      background:var(--bg);color:var(--ink);
+    }
+  }
+  .gateIcon{width:72px;height:72px;margin-bottom:22px;}
+  .gateDivider{width:60px;height:1px;background:var(--ink);opacity:0.4;margin:20px 0;}
+  #phoneGate h1{font-size:18px;letter-spacing:3px;margin:0;}
+  #phoneGate p{font-size:12.5px;line-height:1.7;opacity:0.7;max-width:280px;margin:0;}
+  .gateCredit{font-size:10px;opacity:0.5;letter-spacing:0.5px;}
 </style>
 </head>
 <body>
@@ -161,10 +179,25 @@
   </div>
 </div>
 
+<div id="phoneGate">
+  <svg class="gateIcon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="18,58 44,46 44,80 18,90" fill="#C1272D" stroke="#14110F" stroke-width="1.5"/>
+    <polygon points="44,46 70,36 70,70 44,80" fill="#A79A6D" stroke="#14110F" stroke-width="1.5"/>
+    <polygon points="70,36 70,70 90,62 90,30" fill="#14110F" stroke="#14110F" stroke-width="1.5"/>
+  </svg>
+  <div class="gateDivider"></div>
+  <h1>PARALLAX</h1>
+  <div class="gateDivider"></div>
+  <p>This tool requires a tablet or desktop display for the 3D orbit
+  controls and side panel. Please open it on a larger screen.</p>
+  <div class="gateDivider"></div>
+  <div class="gateCredit">Joe.K &nbsp;&middot;&nbsp; axisbim.io</div>
+</div>
+
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const APP_VERSION = 'v2.10.0';
+  const APP_VERSION = 'v2.11.0';
   const SCALE = 0.01; // world units per footprint/canvas pixel unit
 
   // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
@@ -579,11 +612,16 @@
   }
 
   document.getElementById('appVersion').textContent = APP_VERSION;
-  positionCamera('iso'); // not resetView() — positioning at load isn't a user interaction and shouldn't freeze Auto-Orbit
-  generate();
-  animate();
-  startAutoGen();
-  document.getElementById('autoGenBtn').textContent = 'Auto-generate: On';
+  // below 600px, #phoneGate is shown and #app is hidden via CSS — but CSS
+  // display:none doesn't stop WebGL from rendering an invisible scene every
+  // frame, so skip the whole init (including the render loop) here too
+  if(!window.matchMedia('(max-width: 600px)').matches){
+    positionCamera('iso'); // not resetView() — positioning at load isn't a user interaction and shouldn't freeze Auto-Orbit
+    generate();
+    animate();
+    startAutoGen();
+    document.getElementById('autoGenBtn').textContent = 'Auto-generate: On';
+  }
 </script>
 </body>
 </html>

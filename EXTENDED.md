@@ -68,7 +68,9 @@ else here is fully self-contained.
 Touch-friendly: one-finger orbit, two-finger pinch-zoom (OrbitControls'
 built-in touch handling), canvas sizes responsively instead of a fixed
 900x900, and the panel stacks below the canvas on narrow/tablet-width
-viewports.
+viewports. Below 600px width (phone-width screens), the tool is replaced
+entirely with a message directing to a tablet or desktop — the orbit/
+panel UI doesn't work well at that size regardless of touch support.
 
 Deploys straight from this repo — no build command needed, publish
 directory is the repo root (`netlify.toml` included).
