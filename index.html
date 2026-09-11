@@ -4,14 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PARALLAX</title>
-<!--
-  PARALLAX
-  Seeded generator of axonometric compositions — extruded volumes floating
-  in ambiguous space, no single fixed vanishing point, in the spirit of
-  Lissitzky's Proun plates. Sibling tool to KONSTRUKTOR (which stays flat);
-  PARALLAX is the 3D extension.
-  Joe.K · axisbim.io
--->
 <style>
   :root{ --bg:#EBE6D9; --ink:#14110F; --line:#B8AF9C; }
   html,body{margin:0;height:100%;overflow-x:hidden;background:var(--bg);font-family:"Courier New",monospace;color:var(--ink);}
@@ -49,7 +41,6 @@
   .viewBtn.active{background:var(--ink);color:var(--bg);}
   .viewBtn.active:hover{background:#2a2620;}
 
-  /* hover tooltips — CSS-only via [data-tip], same convention as KONSTRUKTOR */
   [data-tip]{position:relative;}
   [data-tip]::after{
     content:attr(data-tip);
@@ -96,17 +87,12 @@
     transform:translateX(-50%) translateY(0);
   }
 
-  /* tablet / narrow viewport — panel stacks below the canvas instead of
-     beside it, same breakpoint convention as Sound/Relief */
   @media (max-width: 860px){
     #app{flex-direction:column;}
     #canvasWrap{flex:none;height:56vh;width:100%;}
     #panel{width:100%;height:44vh;border-left:none;border-top:2px solid var(--ink);}
   }
 
-  /* phone-width gate — below this, the tool itself doesn't work well
-     regardless of touch support, so it's hidden entirely in favor of a
-     message, matching the Modulor Mondrian convention */
   #phoneGate{display:none;}
   @media (max-width: 600px){
     #app{display:none;}
@@ -199,9 +185,8 @@
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
   const APP_VERSION = 'v2.11.1';
-  const SCALE = 0.01; // world units per footprint/canvas pixel unit
+  const SCALE = 0.01;
 
-  // ---------- seeded PRNG (mulberry32, shared convention across all tools) ----------
   function mulberry32(a){
     return function(){
       a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -213,7 +198,6 @@
 
   const W = 720, H = 720;
 
-  // palette set reused verbatim from KONSTRUKTOR's Proun-mode palette
   const PALETTES = {
     classic: { a:'#C1272D', b:'#14110F', c:'#A79A6D', d:'#7C8A93', bg:'#EBE6D9', line:'#B8AF9C' },
     steel:   { a:'#7C8A93', b:'#14110F', c:'#C1272D', d:'#A79A6D', bg:'#EBE6D9', line:'#B8AF9C' },
@@ -222,10 +206,9 @@
   };
 
   let currentPalette = 'classic';
-  let colorSeed = 1; // decoupled from geometry seed; only Recolor advances this
+  let colorSeed = 1;
   let lastGeometry = null;
 
-  // ---------- footprint generators (local space, centered at origin) ----------
   function footprintRect(rand){
     const w = 30 + rand()*140, h = 30 + rand()*140;
     return [{x:-w/2,y:-h/2},{x:w/2,y:-h/2},{x:w/2,y:h/2},{x:-w/2,y:h/2}];
@@ -281,9 +264,6 @@
       const worldZ = rand()*2.5 - 1.25;
       const depth = shape.depthMin + rand()*(shape.depthMax-shape.depthMin);
 
-      // chaos: divergent volumes get rotated so their extrusion axis is a
-      // *different* world axis than the rest — genuine 3D ambiguity, not a
-      // 2D projection trick
       const divergent = rand() < chaos;
       const divAxis = rand()<0.5 ? 'x' : 'y';
       const divSign = rand()<0.5 ? 1 : -1;
@@ -291,10 +271,6 @@
       volumes.push({type:shape.type, footprint, rot, worldX, worldY, worldZ, depth, divergent, divAxis, divSign});
     }
 
-    // lines: roughly half connect two real volumes' positions (structural
-    // read), half float independently within the same distribution volumes
-    // use (gestural read) — a genuine 3D signature, not the old flat
-    // unprojected accent overlay removed in v1.1.0
     const nLines = parseInt(document.getElementById('lines').value);
     const lines = [];
     const randomPoint = ()=>({
@@ -315,24 +291,16 @@
         a = randomPoint();
         b = randomPoint();
       }
-      // node chance raised, and a subset now get nodes on BOTH ends (reads
-      // as "measured", the way some of Lissitzky's construction lines are
-      // capped at both ends rather than one)
       const nodeRoll = rand();
       let nodeMode = 'none';
       if(nodeRoll < 0.65){
         nodeMode = rand() < 0.4 ? 'both' : 'single';
       }
       const dotEnd = nodeMode==='single' ? (rand() < 0.5 ? a : b) : null;
-      // midpoint node: independent roll, stackable with the endpoint node —
-      // a line can end up with none, an endpoint node, a midpoint node, or both
       const hasMidpoint = rand() < 0.3;
       lines.push({a, b, connective, nodeMode, dotEnd, hasMidpoint});
     }
 
-    // floating nodes: standalone markers with no connecting line at all.
-    // Count derives from the Lines slider rather than a dedicated control,
-    // same convention the old flat accent-line count used with Density.
     const nFloating = Math.round(nLines * 0.5);
     const floatingNodes = [];
     for(let i=0;i<nFloating;i++){
@@ -342,16 +310,11 @@
     return {seed, density, chaos, volumes, lines, floatingNodes};
   }
 
-  // ---------- three.js scene ----------
   const canvasWrap = document.getElementById('canvasWrap');
   const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   canvasWrap.appendChild(renderer.domElement);
 
-  // canvas stays square (matches the square orthographic frustum, so no
-  // aspect-ratio correction is needed) but its pixel size adapts to
-  // whatever space is actually available — fixed 900x900 overflowed on
-  // tablet-width viewports
   function computeCanvasSize(){
     const margin = 24;
     const availW = canvasWrap.clientWidth - margin;
@@ -367,7 +330,7 @@
   window.addEventListener('orientationchange', ()=> setTimeout(resizeRenderer, 200));
 
   const scene = new THREE.Scene();
-  let frustum = 4.2; // initial guess; refit to actual content after every generate
+  let frustum = 4.2;
   const camera = new THREE.OrthographicCamera(-frustum, frustum, frustum, -frustum, 0.1, 200);
   const CAM_START = {x:6, y:4.5, z:7};
 
@@ -377,7 +340,7 @@
     if(!lineBox.isEmpty()) box.union(lineBox);
     if(box.isEmpty()) return;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
-    frustum = Math.max(sphere.radius * 1.3, 1.5); // margin so nothing touches the edge; floor avoids a degenerate tiny frustum on sparse/small compositions
+    frustum = Math.max(sphere.radius * 1.3, 1.5);
     camera.left = -frustum; camera.right = frustum;
     camera.top = frustum; camera.bottom = -frustum;
     camera.updateProjectionMatrix();
@@ -390,10 +353,6 @@
     back:  [0, 0, -CAM_DIST],
     left:  [-CAM_DIST, 0, 0],
     right: [CAM_DIST, 0, 0],
-    // tiny epsilon on x/z, not a true (0, D, 0) pole — OrbitControls' internal
-    // spherical math (azimuth = atan2(z,x)) is undefined exactly at the pole,
-    // and camera.up can't be swapped post-construction to dodge it (r128
-    // caches the up-axis quaternion once, at construction, permanently)
     top:   [0.0001, CAM_DIST, 0.0001]
   };
 
@@ -406,11 +365,6 @@
     document.querySelectorAll('.viewBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
   }
 
-  // setView is what the view-preset buttons and Reset View call — clicking
-  // any of them is a deliberate user interaction, so (like a manual drag)
-  // it freezes auto-orbit. Init uses positionCamera() directly instead,
-  // since positioning the camera on page load isn't a user interaction and
-  // shouldn't silently override the Auto-Orbit default.
   function setView(name){
     positionCamera(name);
     controls.autoRotate = false;
@@ -480,7 +434,7 @@
     lineGroup = new THREE.Group();
 
     const colorRand = mulberry32(lastGeometry.seed + colorSeed*97 + 1000);
-    const fillKeys = ['a','c','d']; // never 'b' — reserved for outlines
+    const fillKeys = ['a','c','d'];
 
     for(const v of lastGeometry.volumes){
       const color = pal[fillKeys[(colorRand()*fillKeys.length)|0]];
@@ -535,7 +489,6 @@
     render();
   }
 
-  // ---- controls ----
   ['seed','density','chaos','lines'].forEach(id=>{
     document.getElementById(id).addEventListener('input', generate);
   });
@@ -557,7 +510,6 @@
     });
   });
 
-  // ---- auto-generate (cycles compositions) ----
   let autoGenTimer = null;
   function autoGenTick(){
     document.getElementById('seed').value = Math.floor(Math.random()*100000);
@@ -578,8 +530,6 @@
     }
   });
   document.getElementById('autoGenInterval').addEventListener('change', ()=>{
-    // if already running, restart immediately at the new interval rather
-    // than waiting out whatever was left of the old one
     if(autoGenTimer){
       clearInterval(autoGenTimer);
       startAutoGen();
@@ -591,13 +541,11 @@
     });
   });
 
-  // ---- auto-orbit (turntable rotation, freezes on manual drag) ----
   document.getElementById('autoOrbitBtn').addEventListener('click', (e)=>{
     controls.autoRotate = !controls.autoRotate;
     e.target.textContent = 'Auto-Orbit: ' + (controls.autoRotate ? 'On' : 'Off');
   });
 
-  // ---- export ----
   document.getElementById('savePng').addEventListener('click', ()=>{
     renderer.render(scene, camera);
     const a = document.createElement('a');
@@ -613,11 +561,8 @@
   }
 
   document.getElementById('appVersion').textContent = APP_VERSION;
-  // below 600px, #phoneGate is shown and #app is hidden via CSS — but CSS
-  // display:none doesn't stop WebGL from rendering an invisible scene every
-  // frame, so skip the whole init (including the render loop) here too
   if(!window.matchMedia('(max-width: 600px)').matches){
-    positionCamera('iso'); // not resetView() — positioning at load isn't a user interaction and shouldn't freeze Auto-Orbit
+    positionCamera('iso');
     generate();
     animate();
     startAutoGen();
